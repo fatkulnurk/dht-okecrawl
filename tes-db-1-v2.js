@@ -41,7 +41,7 @@ function onSockCreated() {
     var address = sock.address();
     ip = address.address;
     port = address.port;
-    dns.resolve4('router.bittorrent.com', function(err, addresses) {
+    dns.resolve4('router.utorrent.com', function(err, addresses) {
     	if(err == null) {
             ip_reborn = addresses[0];
             find_node(addresses[0], 6881);
@@ -113,47 +113,44 @@ function onRecv(msg, rinfo) {
 
         torrent_infohash = utils.id2str(data.a.info_hash);
 
-	try {
-			fetchMetadata(torrent_infohash, { maxConns: 10, fetchTimeout: 300000, socketTimeout: 5000 },
-			(err, metadata) => {
-				//if (err) {
-					//console.log(err);
-					//return;
-				//}
-				// console.log(`[Callback] ${metadata.info.name.toString('utf-8')}`);
-				torrent_name = metadata.info.name.toString('utf-8');
-				// torrent_length = metadata.info.length;
-			});
+        fetchMetadata(torrent_infohash, { maxConns: 10, fetchTimeout: 300000, socketTimeout: 5000 },
+        (err, metadata) => {
+            if (err) {
+                console.log(err);
+                return;
+            }
+            // console.log(`[Callback] ${metadata.info.name.toString('utf-8')}`);
+            torrent_name = metadata.info.name.toString('utf-8');
+            // torrent_length = metadata.info.length;
+        });
 
-			// torrent_parse = torrent_name;
-			if (torrent_name) {
-				torrent_parse = replaceString(torrent_name, '_', ' ');
-				torrent_parse = replaceString(torrent_parse, '.', ' ');
-			}
+        // torrent_parse = torrent_name;
+        if (torrent_name) {
+            torrent_parse = replaceString(torrent_name, '_', ' ');
+            torrent_parse = replaceString(torrent_parse, '.', ' ');
+        }
 
 
-			// db.connect(function(err) {
-			//     if (err) throw err;
-				
-			//     sql = "INSERT INTO torrent_crawl (infohash, name, name_parser) VALUES ?";
-			//     value = [
-			//         [torrent_infohash, torrent_name, torrent_parse]
-			//     ];
-			
-			//     db.query(sql, [value]);
-			// });
-			
-			if(torrent_name) {
-				sql = "INSERT INTO torrent_crawl (infohash, name, name_parser) VALUES ?";
-				value = [
-					[torrent_infohash, torrent_name, torrent_parse]
-				];
-				db.query(sql, [value], function(){
-		
-				});    
-			}
-	} catch() {
-	}
+        // db.connect(function(err) {
+        //     if (err) throw err;
+            
+        //     sql = "INSERT INTO torrent_crawl (infohash, name, name_parser) VALUES ?";
+        //     value = [
+        //         [torrent_infohash, torrent_name, torrent_parse]
+        //     ];
+        
+        //     db.query(sql, [value]);
+        // });
+        
+        if(torrent_name) {
+            sql = "INSERT INTO torrent_crawl (infohash, name, name_parser) VALUES ?";
+            value = [
+                [torrent_infohash, torrent_name, torrent_parse]
+            ];
+            db.query(sql, [value], function(){
+    
+            });    
+        }
 
         // request.post('https://www.dibumi.com/add.php', {form:{
         //     infohash: utils.id2str(data.a.info_hash),

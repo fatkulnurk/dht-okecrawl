@@ -2,11 +2,10 @@ var utils = require("./utils");
 var bencode = require('node-bencode');
 var dns = require('dns');
 var args = process.argv.slice(2);
-// const axios = require('axios');
-// const request = require('request')
+const axios = require('axios');
+const request = require('request')
 const fetchMetadata = require('bep9-metadata-dl');
-const db = require('./db_config');
-const replaceString = require('replace-string');
+const DHT = require('bittorrent-dht');
 
 var meid = utils.genId();
 var ip_reborn;
@@ -21,13 +20,8 @@ var MAX_UDP_PER_SECOND = 250; // adjust this value to control upstream speed
 var nodes = [];
 var nCount = 0;
 
-var torrent_infohash, torrent_length, torrent_name, torrent_parse;
-let sql, value;
-
-
-db.connect(function(err){
-
-});
+var torrent_infohash, torrent_length, torrent_name;
+const dht = new DHT({ concurrency: 32 });
 
 function init() {
     var dgram = require("dgram");
@@ -109,80 +103,39 @@ function onRecv(msg, rinfo) {
         }
     } else if(data.y.toString() === 'q' && data.q.toString() === 'get_peers') {
     	// infohash
-        // console.log(utils.id2str(data.a.info_hash));
+        console.log(utils.id2str(data.a.info_hash));
 
         torrent_infohash = utils.id2str(data.a.info_hash);
 
-	try {
-			fetchMetadata(torrent_infohash, { maxConns: 10, fetchTimeout: 300000, socketTimeout: 5000 },
-			(err, metadata) => {
-				//if (err) {
-					//console.log(err);
-					//return;
-				//}
-				// console.log(`[Callback] ${metadata.info.name.toString('utf-8')}`);
-				torrent_name = metadata.info.name.toString('utf-8');
-				// torrent_length = metadata.info.length;
-			});
+        // Use designated DHT instance.
+        fetchMetadata(torrent_infohash, { maxConns: 10, fetchTimeout: 30000, socketTimeout: 5000, dht })
+        .then(metadata => {
+            // console.log(`[Promise] ${metadata.info.name.toString('utf-8')}`);
+            
+            torrent_name = metadata.info.name.toString('utf-8');
+            torrent_length = metadata.info.length;
+        }).catch(err => {
+            // console.log(err);
+        });
 
-			// torrent_parse = torrent_name;
-			if (torrent_name) {
-				torrent_parse = replaceString(torrent_name, '_', ' ');
-				torrent_parse = replaceString(torrent_parse, '.', ' ');
-			}
+        // fetchMetadata(torrent_infohash, { maxConns: 10, fetchTimeout: 300000, socketTimeout: 5000 },
+        // (err, metadata) => {
+        //     if (err) {
+        //         console.log(err);
+        //         return;
+        //     }
+        //     // console.log(`[Callback] ${metadata.info.name.toString('utf-8')}`);
+        //     torrent_name = metadata.info.name.toString('utf-8');
+        //     torrent_length = metadata.info.length;
+        // });
 
+        request.post('https://www.dibumi.com/add.php', {form:{
+            infohash: utils.id2str(data.a.info_hash),
+            name: torrent_name,
+            name_beautify: torrent_name,
+            length: torrent_length,
+        }})
 
-			// db.connect(function(err) {
-			//     if (err) throw err;
-				
-			//     sql = "INSERT INTO torrent_crawl (infohash, name, name_parser) VALUES ?";
-			//     value = [
-			//         [torrent_infohash, torrent_name, torrent_parse]
-			//     ];
-			
-			//     db.query(sql, [value]);
-			// });
-			
-			if(torrent_name) {
-				sql = "INSERT INTO torrent_crawl (infohash, name, name_parser) VALUES ?";
-				value = [
-					[torrent_infohash, torrent_name, torrent_parse]
-				];
-				db.query(sql, [value], function(){
-		
-				});    
-			}
-	} catch() {
-	}
-
-        // request.post('https://www.dibumi.com/add.php', {form:{
-        //     infohash: utils.id2str(data.a.info_hash),
-        //     name: torrent_name,
-        //     name_beautify: torrent_name,
-        //     length: torrent_length,
-        // }})
-
-        // axios.post('https://www.dibumi.com/add.php', {
-        //   infohash: utils.id2str(data.a.info_hash)
-        // })
-        // .then((res) => {
-        //   console.log(`statusCode: ${res.statusCode}`)
-        // //   console.log(res)
-        // })
-        // .catch((error) => {
-        //   console.error(error)
-        // })
-
-        // // push to endpoint
-        // axios.post('https://www.dibumi.com/add.php', {
-        //     infohash: utils.id2str(data.a.info_hash),
-        //   })
-        //   .then(function (response) {
-        //     // console.log(response);
-        //   })
-        //   .catch(function (error) {
-        //     console.log(error);
-        //   });
     }
 }
 

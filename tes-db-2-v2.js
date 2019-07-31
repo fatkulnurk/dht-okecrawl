@@ -5,6 +5,8 @@ var args = process.argv.slice(2);
 // const axios = require('axios');
 // const request = require('request')
 const fetchMetadata = require('bep9-metadata-dl');
+const DHT = require('bittorrent-dht');
+
 const db = require('./db_config');
 const replaceString = require('replace-string');
 
@@ -23,11 +25,11 @@ var nCount = 0;
 
 var torrent_infohash, torrent_length, torrent_name, torrent_parse;
 let sql, value;
-
-
 db.connect(function(err){
 
 });
+
+const dht = new DHT({ concurrency: 32 });
 
 function init() {
     var dgram = require("dgram");
@@ -41,7 +43,7 @@ function onSockCreated() {
     var address = sock.address();
     ip = address.address;
     port = address.port;
-    dns.resolve4('router.bittorrent.com', function(err, addresses) {
+    dns.resolve4('router.utorrent.com', function(err, addresses) {
     	if(err == null) {
             ip_reborn = addresses[0];
             find_node(addresses[0], 6881);
@@ -113,76 +115,30 @@ function onRecv(msg, rinfo) {
 
         torrent_infohash = utils.id2str(data.a.info_hash);
 
-	try {
-			fetchMetadata(torrent_infohash, { maxConns: 10, fetchTimeout: 300000, socketTimeout: 5000 },
-			(err, metadata) => {
-				//if (err) {
-					//console.log(err);
-					//return;
-				//}
-				// console.log(`[Callback] ${metadata.info.name.toString('utf-8')}`);
-				torrent_name = metadata.info.name.toString('utf-8');
-				// torrent_length = metadata.info.length;
-			});
+        // Use designated DHT instance.
+        fetchMetadata(torrent_infohash, { maxConns: 10, fetchTimeout: 30000, socketTimeout: 5000, dht })
+        .then(metadata => {
+            // console.log(`[Promise] ${metadata.info.name.toString('utf-8')}`);
+            
+            torrent_name = metadata.info.name.toString('utf-8');
+            torrent_length = metadata.info.length;
+        }).catch(err => {
+            // console.log(err);
+        });
+ 
+        if(torrent_name) {
+            torrent_parse = replaceString(torrent_name, '_', ' ');
+            torrent_parse = replaceString(torrent_parse, '.', ' ');
 
-			// torrent_parse = torrent_name;
-			if (torrent_name) {
-				torrent_parse = replaceString(torrent_name, '_', ' ');
-				torrent_parse = replaceString(torrent_parse, '.', ' ');
-			}
+            sql = "INSERT INTO torrent_crawl (infohash, name, name_parser) VALUES ?";
+            value = [
+                [torrent_infohash, torrent_name, torrent_parse]
+            ];
+            db.query(sql, [value], function(){
+    
+            });    
+        }
 
-
-			// db.connect(function(err) {
-			//     if (err) throw err;
-				
-			//     sql = "INSERT INTO torrent_crawl (infohash, name, name_parser) VALUES ?";
-			//     value = [
-			//         [torrent_infohash, torrent_name, torrent_parse]
-			//     ];
-			
-			//     db.query(sql, [value]);
-			// });
-			
-			if(torrent_name) {
-				sql = "INSERT INTO torrent_crawl (infohash, name, name_parser) VALUES ?";
-				value = [
-					[torrent_infohash, torrent_name, torrent_parse]
-				];
-				db.query(sql, [value], function(){
-		
-				});    
-			}
-	} catch() {
-	}
-
-        // request.post('https://www.dibumi.com/add.php', {form:{
-        //     infohash: utils.id2str(data.a.info_hash),
-        //     name: torrent_name,
-        //     name_beautify: torrent_name,
-        //     length: torrent_length,
-        // }})
-
-        // axios.post('https://www.dibumi.com/add.php', {
-        //   infohash: utils.id2str(data.a.info_hash)
-        // })
-        // .then((res) => {
-        //   console.log(`statusCode: ${res.statusCode}`)
-        // //   console.log(res)
-        // })
-        // .catch((error) => {
-        //   console.error(error)
-        // })
-
-        // // push to endpoint
-        // axios.post('https://www.dibumi.com/add.php', {
-        //     infohash: utils.id2str(data.a.info_hash),
-        //   })
-        //   .then(function (response) {
-        //     // console.log(response);
-        //   })
-        //   .catch(function (error) {
-        //     console.log(error);
-        //   });
     }
 }
 
